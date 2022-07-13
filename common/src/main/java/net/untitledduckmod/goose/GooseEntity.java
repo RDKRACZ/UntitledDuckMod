@@ -3,10 +3,7 @@ package net.untitledduckmod.goose;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.block.BlockState;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.entity.ItemEntity;
+import net.minecraft.entity.*;
 import net.minecraft.entity.ai.goal.*;
 import net.minecraft.entity.ai.pathing.PathNodeType;
 import net.minecraft.entity.attribute.DefaultAttributeContainer;
@@ -31,11 +28,14 @@ import net.minecraft.recipe.Ingredient;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvent;
 import net.minecraft.tag.Tag;
+import net.minecraft.tag.TagKey;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.intprovider.UniformIntProvider;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.LocalDifficulty;
+import net.minecraft.world.ServerWorldAccess;
 import net.minecraft.world.World;
 import net.untitledduckmod.ModEntityTypes;
 import net.untitledduckmod.ModItems;
@@ -57,9 +57,9 @@ public class GooseEntity extends TameableEntity implements IAnimatable, Angerabl
     public static final String EGG_LAY_TIME_TAG = "gooseEggLayTime";
     public static final String VARIANT_TAG = "gooseVariant";
     public static final float SWIM_SPEED_MULTIPLIER = 3.0f;
-    protected static final TrackedData<Byte> VARIANT = DataTracker.registerData(TameableEntity.class, TrackedDataHandlerRegistry.BYTE);
-    protected static final TrackedData<Byte> ANIMATION = DataTracker.registerData(TameableEntity.class, TrackedDataHandlerRegistry.BYTE);
-    private static final TrackedData<Integer> ANGER_TIME = DataTracker.registerData(TameableEntity.class, TrackedDataHandlerRegistry.INTEGER);
+    protected static final TrackedData<Byte> VARIANT = DataTracker.registerData(GooseEntity.class, TrackedDataHandlerRegistry.BYTE);
+    protected static final TrackedData<Byte> ANIMATION = DataTracker.registerData(GooseEntity.class, TrackedDataHandlerRegistry.BYTE);
+    private static final TrackedData<Integer> ANGER_TIME = DataTracker.registerData(GooseEntity.class, TrackedDataHandlerRegistry.INTEGER);
     private static final UniformIntProvider ANGER_TIME_RANGE =  UniformIntProvider.create(20, 39);
     private UUID targetUuid;
 
@@ -108,11 +108,30 @@ public class GooseEntity extends TameableEntity implements IAnimatable, Angerabl
         this.setCanPickUpLoot(true);
     }
 
+    @Override
+    public EntityData initialize(ServerWorldAccess world, LocalDifficulty difficulty, SpawnReason spawnReason, @Nullable EntityData entityData, @Nullable NbtCompound entityNbt) {
+        setVariant((byte) random.nextInt(2)); // Randomly choose between the two variants
+        return super.initialize(world, difficulty, spawnReason, entityData, entityNbt);
+    }
+
     public static DefaultAttributeContainer.Builder getDefaultAttributes() {
         return MobEntity.createMobAttributes()
                 .add(EntityAttributes.GENERIC_MAX_HEALTH, 7.0D)
                 .add(EntityAttributes.GENERIC_MOVEMENT_SPEED, 0.2D)
                 .add(EntityAttributes.GENERIC_ATTACK_DAMAGE, 2.0D);
+    }
+
+    @Override
+    public void setTamed(boolean tamed) {
+        super.setTamed(tamed);
+        if (tamed) {
+            getAttributeInstance(EntityAttributes.GENERIC_MAX_HEALTH).setBaseValue(20.0);
+            setHealth(20.0F);
+        } else {
+            getAttributeInstance(EntityAttributes.GENERIC_MAX_HEALTH).setBaseValue(7.0);
+        }
+
+        getAttributeInstance(EntityAttributes.GENERIC_ATTACK_DAMAGE).setBaseValue(2.0);
     }
 
     @Override
@@ -123,8 +142,7 @@ public class GooseEntity extends TameableEntity implements IAnimatable, Angerabl
     @Override
     protected void initDataTracker() {
         super.initDataTracker();
-        byte variant = (byte) random.nextInt(2); // Chooses between 0 and 1 randomly
-        this.dataTracker.startTracking(VARIANT, variant);
+        this.dataTracker.startTracking(VARIANT, (byte)0);
         this.dataTracker.startTracking(ANIMATION, ANIMATION_IDLE);
         this.dataTracker.startTracking(ANGER_TIME, 0);
     }
@@ -142,7 +160,7 @@ public class GooseEntity extends TameableEntity implements IAnimatable, Angerabl
         if (tag.contains(EGG_LAY_TIME_TAG)) {
             this.eggLayTime = tag.getInt(EGG_LAY_TIME_TAG);
         }
-        this.readAngerFromNbt((ServerWorld)this.world, tag);
+        this.readAngerFromNbt(this.world, tag);
     }
 
     public byte getVariant() {
@@ -533,7 +551,7 @@ public class GooseEntity extends TameableEntity implements IAnimatable, Angerabl
     }
 
     @Override
-    protected void swimUpward(Tag<Fluid> fluid) {
+    protected void swimUpward(TagKey<Fluid> fluid) {
         // This bypasses forge modifying jump depending on swim speed
         if (this.getNavigation().canSwim()) {
             this.setVelocity(this.getVelocity().add(0.0D, 0.03999999910593033D, 0.0D));
@@ -569,7 +587,7 @@ public class GooseEntity extends TameableEntity implements IAnimatable, Angerabl
     }
 
     @Override
-    public <A extends IAnimatable> void summonParticle(ParticleKeyFrameEvent<A> particleKeyFrameEvent) {
+    public void summonParticle(ParticleKeyFrameEvent particleKeyFrameEvent) {
         ItemStack stack = getMainHandStack();
         if (stack == ItemStack.EMPTY) {
             return;

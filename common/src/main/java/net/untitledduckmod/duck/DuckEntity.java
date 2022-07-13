@@ -1,7 +1,10 @@
 package net.untitledduckmod.duck;
 
+import com.mojang.logging.LogUtils;
 import net.minecraft.block.BlockState;
+import net.minecraft.entity.EntityData;
 import net.minecraft.entity.EntityType;
+import net.minecraft.entity.SpawnReason;
 import net.minecraft.entity.ai.goal.*;
 import net.minecraft.entity.ai.pathing.PathNodeType;
 import net.minecraft.entity.attribute.DefaultAttributeContainer;
@@ -13,7 +16,6 @@ import net.minecraft.entity.data.TrackedDataHandlerRegistry;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.passive.AnimalEntity;
 import net.minecraft.entity.passive.PassiveEntity;
-import net.minecraft.entity.passive.TameableEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.fluid.Fluid;
 import net.minecraft.item.ItemStack;
@@ -23,16 +25,19 @@ import net.minecraft.recipe.Ingredient;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvent;
-import net.minecraft.tag.Tag;
+import net.minecraft.tag.TagKey;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.LocalDifficulty;
+import net.minecraft.world.ServerWorldAccess;
 import net.minecraft.world.World;
 import net.untitledduckmod.ModEntityTypes;
 import net.untitledduckmod.ModItems;
 import net.untitledduckmod.ModSoundEvents;
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
 import software.bernie.geckolib3.core.IAnimatable;
 import software.bernie.geckolib3.core.PlayState;
 import software.bernie.geckolib3.core.builder.AnimationBuilder;
@@ -42,13 +47,14 @@ import software.bernie.geckolib3.core.manager.AnimationData;
 import software.bernie.geckolib3.core.manager.AnimationFactory;
 
 public class DuckEntity extends AnimalEntity implements IAnimatable {
+    private static final Logger LOGGER = LogUtils.getLogger();
     public static final String EGG_LAY_TIME_TAG = "duckEggLayTime";
     public static final String VARIANT_TAG = "duckVariant";
     public static final String IS_FROM_SACK_TAG = "isFromSack";
 
     public static final float SWIM_SPEED_MULTIPLIER = 3.0f;
-    protected static final TrackedData<Byte> VARIANT = DataTracker.registerData(TameableEntity.class, TrackedDataHandlerRegistry.BYTE);
-    protected static final TrackedData<Byte> ANIMATION = DataTracker.registerData(TameableEntity.class, TrackedDataHandlerRegistry.BYTE);
+    protected static final TrackedData<Byte> VARIANT = DataTracker.registerData(DuckEntity.class, TrackedDataHandlerRegistry.BYTE);
+    protected static final TrackedData<Byte> ANIMATION = DataTracker.registerData(DuckEntity.class, TrackedDataHandlerRegistry.BYTE);
     protected static final byte ANIMATION_IDLE = 0;
     protected static final byte ANIMATION_CLEAN = 1;
     protected static final byte ANIMATION_DIVE = 2;
@@ -93,10 +99,15 @@ public class DuckEntity extends AnimalEntity implements IAnimatable {
     }
 
     @Override
+    public EntityData initialize(ServerWorldAccess world, LocalDifficulty difficulty, SpawnReason spawnReason, @Nullable EntityData entityData, @Nullable NbtCompound entityNbt) {
+        setVariant((byte) random.nextInt(2)); // Randomly choose between the two variants
+        return super.initialize(world, difficulty, spawnReason, entityData, entityNbt);
+    }
+
+    @Override
     protected void initDataTracker() {
         super.initDataTracker();
-        byte variant = (byte) random.nextInt(2); // Chooses between 0 and 1 randomly
-        this.dataTracker.startTracking(VARIANT, variant);
+        this.dataTracker.startTracking(VARIANT, (byte)0);
         this.dataTracker.startTracking(ANIMATION, ANIMATION_IDLE);
     }
 
@@ -204,7 +215,7 @@ public class DuckEntity extends AnimalEntity implements IAnimatable {
                 ItemStack duckSack = new ItemStack(ModItems.getDuckSack());
                 NbtCompound sackData = new NbtCompound();
                 sackData.put("EntityTag", duckData);
-                duckSack.setTag(sackData);
+                duckSack.setNbt(sackData);
 
                 if (stackInHand.isEmpty()) {
                     player.setStackInHand(hand, duckSack);
@@ -312,7 +323,7 @@ public class DuckEntity extends AnimalEntity implements IAnimatable {
     }
 
     @Override
-    protected void swimUpward(Tag<Fluid> fluid) {
+    protected void swimUpward(TagKey<Fluid> fluid) {
         // This bypasses forge modifying jump depending on swim speed
         if (this.getNavigation().canSwim()) {
             this.setVelocity(this.getVelocity().add(0.0D, 0.03999999910593033D, 0.0D));
